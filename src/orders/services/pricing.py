@@ -1,5 +1,6 @@
 """Order pricing: line totals, discounts and shipping."""
 from orders.domain.order import Order, OrderLine
+from shared.utils.money import percent_of
 
 FREE_SHIPPING_FROM_CENTS = 5000
 SHIPPING_CENTS = 495
@@ -7,7 +8,7 @@ SHIPPING_CENTS = 495
 
 def line_total(line: OrderLine) -> int:
     gross = line.quantity * line.unit_price_cents
-    return gross * (100 - line.discount_percent) // 100
+    return gross - percent_of(gross, line.discount_percent)
 
 
 def shipping_for(subtotal_cents: int) -> int:
