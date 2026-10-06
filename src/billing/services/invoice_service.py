@@ -7,7 +7,10 @@ from orders.domain.order import Order
 from orders.services.pricing import line_total
 from shared.utils.money import percent_of
 
-VAT_PERCENT = 20
+EU_REGIONS = {"DE", "FR", "NL", "IE", "ES", "IT"}
+STANDARD_RATES = {"GB": 20, "DE": 19, "FR": 20, "NL": 21, "IE": 23, "ES": 21, "IT": 22}
+REDUCED_RATES = {"GB": 5, "DE": 7, "FR": 5}
+REDUCED_SKUS = ("BOOK-", "FOOD-")
 
 
 class InvoiceError(Exception):
@@ -27,11 +30,25 @@ class InvoiceService:
         lines = []
         for line in order.lines:
             net = line_total(line)
-            lines.append(InvoiceLine(line.sku, net, VAT_PERCENT, percent_of(net, VAT_PERCENT)))
+            rate = self._rate_for(line.sku, order.customer_region)
+            lines.append(InvoiceLine(line.sku, net, rate, percent_of(net, rate)))
         if order.shipping_cents:
-            lines.append(InvoiceLine("Shipping", order.shipping_cents, VAT_PERCENT,
-                                     percent_of(order.shipping_cents, VAT_PERCENT)))
+            rate = STANDARD_RATES.get(order.customer_region, 0)
+            lines.append(InvoiceLine("Shipping", order.shipping_cents, rate,
+                                     percent_of(order.shipping_cents, rate)))
         invoice = Invoice(number=self.repo.next_number(), order_id=order.id,
                           customer_id=order.customer_id, lines=lines)
         invoice.recalculate()
         return self.repo.save(invoice)
+
+    def _rate_for(self, sku: str, region: str) -> int:
+        if sku.startswith(REDUCED_SKUS):
+            if region in REDUCED_RATES:
+                return REDUCED_RATES[region]
+            else:
+                return STANDARD_RATES.get(region, 0)
+        if region in STANDARD_RATES:
+            return STANDARD_RATES[region]
+        if region in EU_REGIONS:
+            return 20
+        return 0
