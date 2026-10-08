@@ -27,21 +27,27 @@ class InvoiceService:
     def invoice_order(self, order: Order) -> Invoice:
         if order.status not in ("placed", "paid"):
             raise InvoiceError("only placed or paid orders are invoiced")
+        reverse_charge = False
+        if order.customer_is_business:
+            if order.customer_region in EU_REGIONS and order.customer_region != "GB":
+                reverse_charge = True
         lines = []
         for line in order.lines:
             net = line_total(line)
-            rate = self._rate_for(line.sku, order.customer_region)
+            rate = self._rate_for(line.sku, order.customer_region, reverse_charge)
             lines.append(InvoiceLine(line.sku, net, rate, percent_of(net, rate)))
         if order.shipping_cents:
-            rate = STANDARD_RATES.get(order.customer_region, 0)
+            rate = 0 if reverse_charge else STANDARD_RATES.get(order.customer_region, 0)
             lines.append(InvoiceLine("Shipping", order.shipping_cents, rate,
                                      percent_of(order.shipping_cents, rate)))
         invoice = Invoice(number=self.repo.next_number(), order_id=order.id,
-                          customer_id=order.customer_id, lines=lines)
+                          customer_id=order.customer_id, lines=lines, reverse_charge=reverse_charge)
         invoice.recalculate()
         return self.repo.save(invoice)
 
-    def _rate_for(self, sku: str, region: str) -> int:
+    def _rate_for(self, sku: str, region: str, reverse_charge: bool) -> int:
+        if reverse_charge:
+            return 0
         if sku.startswith(REDUCED_SKUS):
             if region in REDUCED_RATES:
                 return REDUCED_RATES[region]
