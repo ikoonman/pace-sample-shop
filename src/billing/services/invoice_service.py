@@ -45,6 +45,20 @@ class InvoiceService:
         invoice.recalculate()
         return self.repo.save(invoice)
 
+    def credit_note(self, invoice_number: str, reason: str) -> Invoice:
+        original = self.repo.by_number(invoice_number)
+        if original is None:
+            raise InvoiceError(f"invoice {invoice_number} not found")
+        if original.is_credit_note:
+            raise InvoiceError("a credit note can't be credited")
+        lines = [InvoiceLine(f"Credit: {line.description}", -line.net_cents, line.tax_rate_percent,
+                             -line.tax_cents) for line in original.lines]
+        note = Invoice(number=self.repo.next_number(prefix="CN"), order_id=original.order_id,
+                       customer_id=original.customer_id, lines=lines, reverse_charge=original.reverse_charge,
+                       is_credit_note=True, note=reason)
+        note.recalculate()
+        return self.repo.save(note)
+
     def _rate_for(self, sku: str, region: str, reverse_charge: bool) -> int:
         if reverse_charge:
             return 0

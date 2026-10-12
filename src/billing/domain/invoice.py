@@ -21,6 +21,8 @@ class Invoice:
     tax_cents: int = 0
     total_cents: int = 0
     reverse_charge: bool = False  # EU business customers account for VAT themselves
+    is_credit_note: bool = False
+    note: str = ""
 
     def recalculate(self) -> None:
         self.net_cents = sum(line.net_cents for line in self.lines)
