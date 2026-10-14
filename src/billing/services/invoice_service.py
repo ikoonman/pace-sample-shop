@@ -3,6 +3,7 @@ from typing import Optional
 
 from billing.domain.invoice import Invoice, InvoiceLine
 from billing.storage.invoice_repo import InvoiceRepo
+from customers.storage.customer_repo import CustomerRepo
 from orders.domain.order import Order
 from orders.services.pricing import line_total
 from shared.utils.money import percent_of
@@ -18,8 +19,9 @@ class InvoiceError(Exception):
 
 
 class InvoiceService:
-    def __init__(self, repo: InvoiceRepo) -> None:
+    def __init__(self, repo: InvoiceRepo, customers: Optional[CustomerRepo] = None) -> None:
         self.repo = repo
+        self.customers = customers
 
     def get(self, number: str) -> Optional[Invoice]:
         return self.repo.by_number(number)
@@ -28,6 +30,9 @@ class InvoiceService:
         if order.status not in ("placed", "paid"):
             raise InvoiceError("only placed or paid orders are invoiced")
         reverse_charge = False
+        customer = self.customers.get(order.customer_id) if self.customers else None
+        if customer is not None and customer.vat_number and not order.customer_is_business:
+            order.customer_is_business = True  # VAT number added after the order was placed
         if order.customer_is_business:
             if order.customer_region in EU_REGIONS and order.customer_region != "GB":
                 reverse_charge = True
