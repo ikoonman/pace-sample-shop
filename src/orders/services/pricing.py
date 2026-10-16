@@ -11,8 +11,12 @@ def line_total(line: OrderLine) -> int:
     return gross - percent_of(gross, line.discount_percent)
 
 
+def isFreeShipping(subtotal_cents: int) -> bool:
+    return subtotal_cents >= FREE_SHIPPING_FROM_CENTS
+
+
 def shipping_for(subtotal_cents: int) -> int:
-    return 0 if subtotal_cents > FREE_SHIPPING_FROM_CENTS else SHIPPING_CENTS
+    return 0 if isFreeShipping(subtotal_cents) else SHIPPING_CENTS
 
 
 def price_order(order: Order) -> Order:
