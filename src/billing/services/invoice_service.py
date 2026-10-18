@@ -68,7 +68,9 @@ class InvoiceService:
         if reverse_charge:
             return 0
         if sku.startswith(REDUCED_SKUS):
-            if region in REDUCED_RATES:
+            if region == "GB" and sku.startswith("BOOK-"):
+                return 0
+            elif region in REDUCED_RATES:
                 return REDUCED_RATES[region]
             else:
                 return STANDARD_RATES.get(region, 0)
