@@ -1,10 +1,19 @@
 """Order use cases."""
+import logging
 import uuid
+from datetime import datetime, timezone
+from typing import Optional
 
+from billing.domain.invoice import Invoice
+from billing.services.invoice_service import InvoiceService
 from customers.services.customer_service import CustomerService
 from orders.domain.order import Order, OrderLine
 from orders.services.pricing import price_order
 from orders.storage.order_repo import OrderRepo
+from shared.utils.events import publish
+from shared.utils.money import format_cents
+
+log = logging.getLogger(__name__)
 
 
 class OrderError(Exception):
@@ -12,9 +21,11 @@ class OrderError(Exception):
 
 
 class OrderService:
-    def __init__(self, repo: OrderRepo, customers: CustomerService) -> None:
+    def __init__(self, repo: OrderRepo, customers: CustomerService,
+                 invoices: Optional[InvoiceService] = None) -> None:
         self.repo = repo
         self.customers = customers
+        self.invoices = invoices
 
     def create(self, customer_id: str) -> Order:
         customer = self.customers.get(customer_id)
@@ -37,7 +48,14 @@ class OrderService:
         if not order.lines:
             raise OrderError("an order needs at least one line")
         order.status = "placed"
-        return self.repo.save(order)
+        order = self.repo.save(order)
+        if self.invoices is None:
+            return order
+        invoice: Invoice = self.invoices.invoice_order(order)
+        publish("order.placed", {"order_id": order.id, "invoice": invoice.number,
+                                 "at": datetime.now(timezone.utc).isoformat()})
+        log.info("order %s placed, invoiced %s", order.id, format_cents(invoice.total_cents))
+        return order
 
     def _get(self, order_id: str) -> Order:
         order = self.repo.get(order_id)
